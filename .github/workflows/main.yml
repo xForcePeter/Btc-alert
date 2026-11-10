@@ -1,0 +1,29 @@
+On:
+schedule:
+- cron: "0 7,13,21 * * *"
+  jobs report:
+  runs-on: ubuntu-latest
+  steps:
+- name: Send Telegram report
+  env:
+  TELEGRAM BOT TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+  CHAT ID: "5263358515"
+LVL1: "75580.4"
+LVL2: "73400"
+run: |
+python - <<'PY'
+import os, datetime, urllib.request, urllib.parse now = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')
+lvl1 = os.environ
+lvl2 = os.environ
+url = "https://api.bybit.com/v5/market/tickers?category=linear&symbol=BTCUSDT"
+
+j = urllib.request.urlopen(url, timeout=20).read()
+price = float((
+
+j)
+কাছের_text
+
+= f'Cena: {price:.2f} USDT\nDo górnego poziomu (lvl1): {lvl1}\nDo dolnego (lvl2): {lvl2}\nCzas obliczenia: {now}'
+data = urllib.parse.urlencode({'chat_id': os.environ,'text':
+
+urllib.request.urlopen("https://api.telegram.org/bot"+os.environ+"/sendMessage", data=data.encode('utf-8'), timeout=20).read() PY
