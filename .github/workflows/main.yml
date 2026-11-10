@@ -1,29 +1,54 @@
-On:
-schedule:
-- cron: "0 7,13,21 * * *"
-  jobs report:
-  runs-on: ubuntu-latest
-  steps:
-- name: Send Telegram report
-  env:
-  TELEGRAM BOT TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-  CHAT ID: "5263358515"
-LVL1: "75580.4"
-LVL2: "73400"
-run: |
-python - <<'PY'
-import os, datetime, urllib.request, urllib.parse now = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')
-lvl1 = os.environ
-lvl2 = os.environ
-url = "https://api.bybit.com/v5/market/tickers?category=linear&symbol=BTCUSDT"
+name: BTC Telegram report
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 6,7,20,21 * * *'
+    - cron: '30 12,13 * * *'
 
-j = urllib.request.urlopen(url, timeout=20).read()
-price = float((
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send report
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT_ID: '5263358515'
+          LVL1: '75580.4'
+          LVL2: '73400'
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          python - <<'PY'
+          import os, json, urllib.request, urllib.parse, datetime
+          from zoneinfo import ZoneInfo
 
-j)
-কাছের_text
+          now = datetime.datetime.now(ZoneInfo('Europe/Warsaw'))
+          if os.environ['EVENT_NAME'] == 'schedule' and (now.hour, now.minute) not in [(8, 0), (14, 30), (22, 0)]:
+              print('Outside Polish reporting hours; skipping')
+              raise SystemExit(0)
 
-= f'Cena: {price:.2f} USDT\nDo górnego poziomu (lvl1): {lvl1}\nDo dolnego (lvl2): {lvl2}\nCzas obliczenia: {now}'
-data = urllib.parse.urlencode({'chat_id': os.environ,'text':
-
-urllib.request.urlopen("https://api.telegram.org/bot"+os.environ+"/sendMessage", data=data.encode('utf-8'), timeout=20).read() PY
+          url = 'https://api.bybit.com/v5/market/tickers?category=linear&symbol=BTCUSDT'
+          with urllib.request.urlopen(url, timeout=20) as response:
+              result = json.load(response)
+          if result.get('retCode') != 0:
+              raise RuntimeError(f'Bybit API error: {result}')
+          price = float(result['result']['list'][0]['lastPrice'])
+          high, low = float(os.environ['LVL1']), float(os.environ['LVL2'])
+          if not low < price < high:
+              message = (f'BTCUSDT Bybit: {price:.2f} USDT\n'
+                         f'Poziomy: {low:.2f} / {high:.2f} USDT\n'
+                         'Cena jest poza przedziałem poziomów; model odległości nie ma zastosowania.')
+          else:
+              # Distance-based heuristic, not calibrated probability.
+              upper = 100 * (price - low) / (high - low)
+              lower = 100 - upper
+              message = (f'BTCUSDT Bybit: {price:.2f} USDT\n'
+                         f'Górny {high:.2f}: {upper:.1f}%\n'
+                         f'Dolny {low:.2f}: {lower:.1f}%\n'
+                         'Wskaźnik odległości, nie rzeczywiste prawdopodobieństwo.')
+          message += '\nCzas PL: ' + now.strftime('%Y-%m-%d %H:%M %Z')
+          token = os.environ['TELEGRAM_BOT_TOKEN']
+          data = urllib.parse.urlencode({'chat_id': os.environ['CHAT_ID'], 'text': message}).encode()
+          req = urllib.request.Request(f'https://api.telegram.org/bot{token}/sendMessage', data=data)
+          with urllib.request.urlopen(req, timeout=20) as response:
+              print('Telegram status:', response.status)
+          PY
